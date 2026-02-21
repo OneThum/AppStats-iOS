@@ -53,6 +53,15 @@ public struct Event: Codable, Sendable {
     /// Platform (ios, macos, visionos)
     public let platform: String
     
+    /// Screen resolution in pixels (e.g. "1290x2796")
+    public let screenResolution: String
+    
+    /// Device locale (e.g. "en_US")
+    public let locale: String
+    
+    /// Device timezone (e.g. "America/New_York")
+    public let timezone: String
+    
     /// SDK version
     public let sdkVersion: String
     
@@ -81,6 +90,9 @@ public struct Event: Codable, Sendable {
         self.deviceModel = DeviceInfo.deviceModel
         self.osVersion = DeviceInfo.osVersion
         self.platform = DeviceInfo.platform
+        self.screenResolution = DeviceInfo.screenResolution
+        self.locale = DeviceInfo.locale
+        self.timezone = DeviceInfo.timezone
         self.sdkVersion = SDKInfo.version
         
         // Convert properties to AnyCodable
@@ -105,6 +117,9 @@ public struct Event: Codable, Sendable {
         case deviceModel = "device_model"
         case osVersion = "os_version"
         case platform
+        case screenResolution = "screen_resolution"
+        case locale
+        case timezone
         case sdkVersion = "sdk_version"
         case properties
     }
