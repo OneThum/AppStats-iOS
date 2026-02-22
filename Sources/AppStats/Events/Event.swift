@@ -103,6 +103,32 @@ public struct Event: Codable, Sendable {
         }
     }
     
+    // MARK: - JSON Decoding
+    
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id             = try c.decode(UUID.self,    forKey: .id)
+        timestamp      = try c.decode(Date.self,    forKey: .timestamp)
+        type           = try c.decode(EventType.self, forKey: .type)
+        name           = try c.decodeIfPresent(String.self, forKey: .name)
+        sessionID      = try c.decode(UUID.self,    forKey: .sessionID)
+        screenName     = try c.decodeIfPresent(String.self, forKey: .screenName)
+        appVersion     = try c.decode(String.self,  forKey: .appVersion)
+        buildNumber    = try c.decode(String.self,  forKey: .buildNumber)
+        deviceModel    = try c.decode(String.self,  forKey: .deviceModel)
+        osVersion      = try c.decode(String.self,  forKey: .osVersion)
+        platform       = try c.decode(String.self,  forKey: .platform)
+        
+        // Migration-safe: New in 1.0.6 — fall back gracefully for events persisted by older SDK versions
+        screenResolution = try c.decodeIfPresent(String.self, forKey: .screenResolution) ?? "unknown"
+        locale           = try c.decodeIfPresent(String.self, forKey: .locale)           ?? "unknown"
+        timezone         = try c.decodeIfPresent(String.self, forKey: .timezone)         ?? "unknown"
+        
+        sdkVersion     = try c.decode(String.self,  forKey: .sdkVersion)
+        properties     = try c.decodeIfPresent([String: AnyCodable].self, forKey: .properties)
+    }
+    
     // MARK: - JSON Encoding
     
     enum CodingKeys: String, CodingKey {
