@@ -57,16 +57,31 @@ actor EventCollector {
     func flush() async throws {
         guard !eventQueue.isEmpty else { return }
         
-        // Take events from queue
-        let eventsToSend = eventQueue
-        eventQueue.removeAll()
+        // Take up to 100 events from queue to avoid hitting server limits
+        let eventsToSend = Array(eventQueue.prefix(100))
+        eventQueue.removeFirst(eventsToSend.count)
         
         // Send to server
         do {
             try await network.sendEvents(eventsToSend)
             
-            // Clear from persistent storage on success
-            try await storage.clearEvents()
+            // Clear from persistent storage on success if queue is empty,
+            // otherwise just re-persist remaining queue
+            if eventQueue.isEmpty {
+                try await storage.clearEvents()
+            } else {
+                try await storage.clearEvents()
+                for event in eventQueue {
+                    try? await storage.saveEvent(event)
+                }
+            }
+            
+            // If we still have events, recursively flush again
+            if !eventQueue.isEmpty {
+                Task {
+                    try? await flush()
+                }
+            }
             
         } catch {
             // On failure, restore events to queue
