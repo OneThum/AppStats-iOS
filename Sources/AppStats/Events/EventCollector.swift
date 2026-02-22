@@ -70,10 +70,7 @@ actor EventCollector {
             if eventQueue.isEmpty {
                 try await storage.clearEvents()
             } else {
-                try await storage.clearEvents()
-                for event in eventQueue {
-                    try? await storage.saveEvent(event)
-                }
+                try await storage.saveEvents(eventQueue)
             }
             
             // If we still have events, recursively flush again
