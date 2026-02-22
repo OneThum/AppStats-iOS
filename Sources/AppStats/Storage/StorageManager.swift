@@ -39,20 +39,16 @@ actor StorageManager {
     
     // MARK: - Event Persistence
     
-    /// Save an event to disk
-    func saveEvent(_ event: Event) throws {
+    /// Save the entire queue to disk (overwrites existing)
+    func saveEvents(_ events: [Event]) throws {
         // Check disk budget
         let currentSize = try calculateStorageSize()
-        if currentSize >= maxStorageSize {
-            // Prune oldest events
-            try pruneOldEvents()
+        if currentSize >= maxStorageSize && !events.isEmpty {
+            // If we're over budget, don't write
+            return
         }
         
-        // Load existing events
-        var events = try loadEvents()
-        events.append(event)
-        
-        // Save back to disk
+        // Save to disk
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(events)

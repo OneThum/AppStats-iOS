@@ -43,7 +43,7 @@ actor EventCollector {
         eventQueue.append(event)
         
         // Persist to disk
-        try await storage.saveEvent(event)
+        try await storage.saveEvents(eventQueue)
         
         // Flush if batch size reached
         if eventQueue.count >= batchSize {
