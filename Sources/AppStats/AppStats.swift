@@ -20,13 +20,12 @@ import AppKit
 ///
 /// @main
 /// struct MyApp: App {
-///     init() {
-///         AppStats.configure(apiKey: "as_live_xxxxxxxxxxxx")
-///     }
-///
 ///     var body: some Scene {
 ///         WindowGroup {
 ///             ContentView()
+///                 .task {
+///                     AppStats.configure(apiKey: "as_live_xxxxxxxxxxxx")
+///                 }
 ///         }
 ///     }
 /// }
@@ -38,8 +37,10 @@ public final class AppStats {
     
     /// Configure the AppStats SDK with your API key.
     ///
-    /// This should be called once during app launch, typically in your app delegate's
-    /// `application(_:didFinishLaunchingWithOptions:)` or in your SwiftUI `App` initializer.
+    /// Call once during app launch. In SwiftUI apps, the recommended call site is a
+    /// `.task` modifier on your root view so the first frame renders without delay.
+    /// Calling from `App.init()` or `application(_:didFinishLaunchingWithOptions:)`
+    /// also works — the heavy initialization is already async.
     ///
     /// - Parameters:
     ///   - apiKey: Your AppStats API key (e.g., "as_live_xxxxxxxxxxxx")
