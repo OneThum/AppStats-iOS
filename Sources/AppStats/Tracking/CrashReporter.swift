@@ -17,6 +17,12 @@ enum CrashReporter {
     
     static func setup(sessionID: UUID) {
         self.sessionID = sessionID
+
+        do {
+            _ = try StoragePaths.ensureAppStatsDirectoryExists()
+        } catch {
+            Logger.warning("Crash marker storage unavailable: \(error)")
+        }
         
         // Install signal handlers
         installSignalHandlers()
@@ -122,7 +128,7 @@ enum CrashReporter {
         stackTrace: String? = nil
     ) {
         // Write to a pre-allocated file (async-signal-safe)
-        guard let crashFilePath = getCrashFilePath() else { return }
+        guard let crashFileURL = getCrashFileURL() else { return }
         
         let crashInfo = """
         CRASH_TIMESTAMP: \(timestamp.timeIntervalSince1970)
@@ -133,27 +139,24 @@ enum CrashReporter {
         \(stackTrace ?? "N/A")
         """
         
-        try? crashInfo.write(toFile: crashFilePath, atomically: false, encoding: .utf8)
+        try? crashInfo.write(to: crashFileURL, atomically: false, encoding: .utf8)
     }
     
-    private static func getCrashFilePath() -> String? {
-        let paths = NSSearchPathForDirectoriesInDomains(.applicationSupportDirectory, .userDomainMask, true)
-        guard let appSupport = paths.first else { return nil }
-        let lgDirectory = (appSupport as NSString).appendingPathComponent("AppStats")
-        return (lgDirectory as NSString).appendingPathComponent("crash.txt")
+    private static func getCrashFileURL() -> URL? {
+        try? StoragePaths.crashMarkerURL()
     }
     
     // MARK: - Crash Detection (Next Launch)
     
     static func checkForPreviousCrash() -> String? {
-        guard let crashFilePath = getCrashFilePath(),
-              FileManager.default.fileExists(atPath: crashFilePath),
-              let crashData = try? String(contentsOfFile: crashFilePath, encoding: .utf8) else {
+        guard let crashFileURL = getCrashFileURL(),
+              FileManager.default.fileExists(atPath: crashFileURL.path),
+              let crashData = try? String(contentsOf: crashFileURL, encoding: .utf8) else {
             return nil
         }
         
         // Delete crash file
-        try? FileManager.default.removeItem(atPath: crashFilePath)
+        try? FileManager.default.removeItem(at: crashFileURL)
         
         return crashData
     }

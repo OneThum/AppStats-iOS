@@ -5,7 +5,7 @@ The official Swift SDK for AppStats analytics.
 ## Features
 
 - 🎯 **Zero-config tracking** - Automatic screen views and lifecycle events
-- 📱 **Apple-native** - Built with Swift 6, supports iOS 16+, macOS 13+, visionOS 1.0+
+- 📱 **Apple-native** - Built with Swift 6, supports iOS 16+, tvOS 16+, macOS 13+, visionOS 1.0+
 - 🔐 **Privacy-first** - No PII, no advertising IDs, no persistent tracking
 - ⚡ **Lightweight** - < 200KB binary size, < 5ms launch impact
 - 🛡️ **Crash reporting** - Automatic crash detection with symbolicated stack traces
@@ -20,14 +20,14 @@ Add AppStats to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/OneThum/AppStats.git", from: "1.0.9")
+    .package(url: "https://github.com/OneThum/AppStats.git", from: "1.0.11")
 ]
 ```
 
 Or in Xcode:
 1. File → Add Package Dependencies
 2. Enter: `https://github.com/OneThum/AppStats.git`
-3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.9`
+3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.11`
 
 ## Quick Start
 
@@ -229,7 +229,7 @@ AppStats is built with privacy as a first-class feature:
 
 ## Requirements
 
-- iOS 16.0+ / macOS 13.0+ / visionOS 1.0+
+- iOS 16.0+ / tvOS 16.0+ / macOS 13.0+ / visionOS 1.0+
 - Swift 6.0+
 - Xcode 15.0+
 

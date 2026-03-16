@@ -142,53 +142,44 @@ public final class AppStats {
     }
     
     private func initialize() async {
-        // Defensive: catch all errors during initialization
-        do {
-            // Create managers
-            self.storageManager = try StorageManager()
-            self.networkManager = NetworkManager(
-                apiKey: configuration.apiKey,
-                baseURL: configuration.baseURL
-            )
-            self.eventCollector = EventCollector(
-                sessionID: sessionID,
-                storage: storageManager!,
-                network: networkManager!
-            )
-            
-            // Setup automatic tracking
-            if configuration.autoTrackScreens {
-                #if canImport(UIKit) && !os(watchOS)
-                setupUIKitScreenTracking()
-                #endif
-            }
-            
-            // Setup lifecycle observers
-            setupLifecycleObservers()
-            
-            // Setup crash reporting
-            setupCrashReporting()
-            
-            // Start periodic flush timer
-            startFlushTimer()
-            
-            // Track app launch
-            await trackAppLaunch()
-            
-            // Mark initialization as complete
-            self.isInitialized = true
-            self.isInitializing = false
-            Logger.info("AppStats SDK initialized successfully")
-            
-            // Process any events that were queued during initialization
-            await processPendingEvents()
-            
-        } catch {
-            Logger.error("AppStats initialization failed: \(error)")
-            self.isDisabled = true
-            self.isInitializing = false
-            self.pendingEvents.removeAll()
+        // Create managers
+        self.storageManager = StorageManager()
+        self.networkManager = NetworkManager(
+            apiKey: configuration.apiKey,
+            baseURL: configuration.baseURL
+        )
+        self.eventCollector = EventCollector(
+            sessionID: sessionID,
+            storage: storageManager!,
+            network: networkManager!
+        )
+        
+        // Setup automatic tracking
+        if configuration.autoTrackScreens {
+            #if canImport(UIKit) && !os(watchOS)
+            setupUIKitScreenTracking()
+            #endif
         }
+        
+        // Setup lifecycle observers
+        setupLifecycleObservers()
+        
+        // Setup crash reporting
+        setupCrashReporting()
+        
+        // Start periodic flush timer
+        startFlushTimer()
+        
+        // Track app launch
+        await trackAppLaunch()
+        
+        // Mark initialization as complete
+        self.isInitialized = true
+        self.isInitializing = false
+        Logger.info("AppStats SDK initialized successfully")
+        
+        // Process any events that were queued during initialization
+        await processPendingEvents()
     }
     
     // MARK: - Event Tracking
@@ -496,7 +487,7 @@ extension AppStats {
 
 // MARK: - Logging
 
-private enum Logger {
+enum Logger {
     static func info(_ message: String) {
         #if DEBUG
         print("[AppStats] ℹ️ \(message)")
