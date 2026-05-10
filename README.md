@@ -20,13 +20,13 @@ Add AppStats to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/OneThum/AppStats.git", from: "1.0.12")
+    .package(url: "https://github.com/OneThum/AppStats-iOS.git", from: "1.0.12")
 ]
 ```
 
 Or in Xcode:
 1. File → Add Package Dependencies
-2. Enter: `https://github.com/OneThum/AppStats.git`
+2. Enter: `https://github.com/OneThum/AppStats-iOS.git`
 3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.12`
 
 ## Quick Start
@@ -322,7 +322,7 @@ Yes. Events are queued locally and automatically sent when connectivity is resto
 
 - **Documentation**: https://docs.appstats.com
 - **Dashboard**: https://app.appstats.com
-- **Issues**: https://github.com/OneThum/AppStats/issues
+- **Issues**: https://github.com/OneThum/AppStats-iOS/issues
 
 ## License
 
