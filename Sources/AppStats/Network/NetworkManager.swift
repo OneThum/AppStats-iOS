@@ -63,6 +63,7 @@ actor NetworkManager {
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "X-AS-Key")
         request.setValue(SDKInfo.version, forHTTPHeaderField: "X-AS-SDK-Version")
+        request.setValue("swift", forHTTPHeaderField: "X-AS-SDK-Platform")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("deflate", forHTTPHeaderField: "Content-Encoding")
         
