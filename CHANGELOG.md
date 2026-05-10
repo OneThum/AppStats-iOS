@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.12] - 2026-05-09
 
 ### Added
-- Send `X-AS-SDK-Platform: swift` header on every ingest request so the backend (and upcoming dashboard breakdowns) can distinguish Swift-emitted events from Kotlin-emitted events. This aligns the Swift SDK with the new cross-SDK protocol shared with the Kotlin SDK at `OneThum/appstats-android`.
+- Send `X-AS-SDK-Platform: swift` header on every ingest request so the backend (and upcoming dashboard breakdowns) can distinguish Swift-emitted events from Kotlin-emitted events. This aligns the Swift SDK with the new cross-SDK protocol shared with the Kotlin SDK at `OneThum/AppStats-Android`.
 - Audited all event field names against `schemas/event.v1.json` (the canonical wire schema in AppStats-PVT). No drift was found; this release is wire-compatible with v1.0.11.
 
 ## [1.0.11] - 2026-03-16
