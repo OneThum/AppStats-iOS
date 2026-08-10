@@ -37,15 +37,10 @@ enum DeviceInfo {
     }
     
     /// OS version (e.g., "17.4.1")
+    /// Uses ProcessInfo so this stays nonisolated under Swift 6 (UIDevice is MainActor).
     static var osVersion: String {
-        #if canImport(UIKit)
-        return UIDevice.current.systemVersion
-        #elseif canImport(AppKit)
         let version = ProcessInfo.processInfo.operatingSystemVersion
         return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
-        #else
-        return "unknown"
-        #endif
     }
     
     /// Platform identifier
@@ -68,12 +63,12 @@ enum DeviceInfo {
     /// Screen resolution (width x height)
     static var screenResolution: String {
         #if canImport(UIKit) && !os(watchOS)
-        let screen = UIScreen.main
-        let scale = screen.scale
-        let bounds = screen.bounds
-        let width = Int(bounds.width * scale)
-        let height = Int(bounds.height * scale)
-        return "\(width)x\(height)"
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { uiKitScreenResolution() }
+        }
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated { uiKitScreenResolution() }
+        }
         #elseif canImport(AppKit)
         guard let screen = NSScreen.main else { return "unknown" }
         let frame = screen.frame
@@ -85,6 +80,18 @@ enum DeviceInfo {
         return "unknown"
         #endif
     }
+
+    #if canImport(UIKit) && !os(watchOS)
+    @MainActor
+    private static func uiKitScreenResolution() -> String {
+        let screen = UIScreen.main
+        let scale = screen.scale
+        let bounds = screen.bounds
+        let width = Int(bounds.width * scale)
+        let height = Int(bounds.height * scale)
+        return "\(width)x\(height)"
+    }
+    #endif
     
     /// Device locale
     static var locale: String {

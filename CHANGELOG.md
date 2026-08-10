@@ -5,6 +5,12 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2026-08-10
+
+### Fixed
+- Swift 6 / Xcode 16.4: `DeviceInfo.osVersion` now uses `ProcessInfo` instead of MainActor-isolated `UIDevice`.
+- Swift 6 / Xcode 16.4: `DeviceInfo.screenResolution` hops to the main actor before reading `UIScreen`, so package clients build under Strict Concurrency.
+
 ## [1.0.12] - 2026-05-09
 
 ### Added
