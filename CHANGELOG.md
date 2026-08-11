@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Swift 6 / Xcode 16.4: `DeviceInfo.osVersion` now uses `ProcessInfo` instead of MainActor-isolated `UIDevice`.
 - Swift 6 / Xcode 16.4: `DeviceInfo.screenResolution` hops to the main actor before reading `UIScreen`, so package clients build under Strict Concurrency.
+- `setUserProperty` was a no-op: the private `setProperty` it delegated to had an empty body, so a property set before `track()` never appeared on any event. User properties are now stored on the `AppStats` instance, merged into every event (custom, lifecycle, and app-launch), and persisted to disk so they survive a cold relaunch.
+- Crash markers were written on crash but never read back: `checkForPreviousCrash()` was `internal` (unreachable by host apps) and nothing in the SDK called it either, so the crash-reporting feature was non-functional end-to-end. `initialize()` now automatically replays any crash from the previous launch as a `crash` event before continuing normal startup.
 
 ## [1.0.12] - 2026-05-09
 

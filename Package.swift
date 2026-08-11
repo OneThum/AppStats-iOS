@@ -29,6 +29,11 @@ let package = Package(
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
+        ),
+        .testTarget(
+            name: "AppStatsTests",
+            dependencies: ["AppStats"],
+            path: "Tests/AppStatsTests"
         )
     ],
     swiftLanguageModes: [.v6]

@@ -11,28 +11,31 @@ actor StorageManager {
     private let fileManager = FileManager.default
     private let storageDirectory: URL?
     private let databaseURL: URL?
-    
+    private let userPropertiesURL: URL?
+
     private let maxStorageSize: UInt64 = 10 * 1024 * 1024 // 10 MB limit
-    
+
     // MARK: - Initialization
-    
+
     init() {
         let fileManager = FileManager.default
-        let resolvedPaths: (storageDirectory: URL?, databaseURL: URL?)
+        let resolvedPaths: (storageDirectory: URL?, databaseURL: URL?, userPropertiesURL: URL?)
 
         do {
             let storageDirectory = try StoragePaths.ensureAppStatsDirectoryExists(fileManager: fileManager)
             resolvedPaths = (
                 storageDirectory,
-                try StoragePaths.eventsFileURL(fileManager: fileManager)
+                try StoragePaths.eventsFileURL(fileManager: fileManager),
+                try StoragePaths.userPropertiesFileURL(fileManager: fileManager)
             )
         } catch {
-            resolvedPaths = (nil, nil)
+            resolvedPaths = (nil, nil, nil)
             Logger.warning("Persistent storage unavailable - using in-memory queue only: \(error)")
         }
 
         self.storageDirectory = resolvedPaths.storageDirectory
         self.databaseURL = resolvedPaths.databaseURL
+        self.userPropertiesURL = resolvedPaths.userPropertiesURL
     }
     
     // MARK: - Event Persistence
@@ -84,7 +87,33 @@ actor StorageManager {
             try fileManager.removeItem(at: databaseURL)
         }
     }
-    
+
+    // MARK: - User Property Persistence
+
+    /// Save the entire user property set to disk (overwrites existing)
+    func saveUserProperties(_ properties: [String: AnyCodable]) throws {
+        guard let userPropertiesURL else { return }
+
+        try ensureStorageDirectoryExists()
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(properties)
+
+        try data.write(to: userPropertiesURL, options: .atomic)
+    }
+
+    /// Load persisted user properties
+    func loadUserProperties() throws -> [String: AnyCodable] {
+        guard let userPropertiesURL else { return [:] }
+
+        guard fileManager.fileExists(atPath: userPropertiesURL.path) else {
+            return [:]
+        }
+
+        let data = try Data(contentsOf: userPropertiesURL)
+        return try JSONDecoder().decode([String: AnyCodable].self, from: data)
+    }
+
     // MARK: - Private
     
     private func calculateStorageSize() throws -> UInt64 {

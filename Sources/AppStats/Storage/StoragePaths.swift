@@ -8,6 +8,7 @@ enum StoragePaths {
     private static let appStatsDirectoryName = "AppStats"
     private static let eventsFileName = "events.json"
     private static let crashMarkerFileName = "crash.txt"
+    private static let userPropertiesFileName = "user_properties.json"
 
     #if os(tvOS)
     private static let baseDirectoryKind: FileManager.SearchPathDirectory = .cachesDirectory
@@ -47,5 +48,10 @@ enum StoragePaths {
     static func crashMarkerURL(fileManager: FileManager = .default) throws -> URL {
         let directory = try appStatsDirectory(fileManager: fileManager)
         return directory.appendingPathComponent(crashMarkerFileName)
+    }
+
+    static func userPropertiesFileURL(fileManager: FileManager = .default) throws -> URL {
+        let directory = try appStatsDirectory(fileManager: fileManager)
+        return directory.appendingPathComponent(userPropertiesFileName)
     }
 }

@@ -198,7 +198,7 @@ public enum AnyCodable: Codable, Sendable {
     
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        
+
         switch self {
         case .int(let value):
             try container.encode(value)
@@ -210,6 +210,17 @@ public enum AnyCodable: Codable, Sendable {
             try container.encode(value)
         case .null:
             try container.encodeNil()
+        }
+    }
+
+    /// Unwraps back to the underlying value, for merging into an `Any`-typed properties dict.
+    var unwrapped: Any {
+        switch self {
+        case .int(let value): return value
+        case .double(let value): return value
+        case .bool(let value): return value
+        case .string(let value): return value
+        case .null: return NSNull()
         }
     }
 }

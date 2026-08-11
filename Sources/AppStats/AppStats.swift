@@ -133,6 +133,7 @@ public final class AppStats {
     private var isDisabled = false
     private var errorCount = 0
     private var pendingEvents: [(eventName: String, properties: [String: Any]?)] = []
+    private var userProperties: [String: AnyCodable] = [:]
     
     // MARK: - Initialization
     
@@ -153,7 +154,11 @@ public final class AppStats {
             storage: storageManager!,
             network: networkManager!
         )
-        
+
+        // Restore user properties set in a previous session, without clobbering
+        // any already set on this instance (e.g. a setUserProperty call that raced ahead of us)
+        await loadPersistedUserProperties()
+
         // Setup automatic tracking
         if configuration.autoTrackScreens {
             #if canImport(UIKit) && !os(watchOS)
@@ -166,10 +171,15 @@ public final class AppStats {
         
         // Setup crash reporting
         setupCrashReporting()
-        
+
+        // Replay any crash from the previous launch as a `crash` event before
+        // continuing normal startup — this is what makes crash reporting work
+        // end-to-end with zero integration effort from the host app.
+        await reportPreviousCrashIfNeeded()
+
         // Start periodic flush timer
         startFlushTimer()
-        
+
         // Track app launch
         await trackAppLaunch()
         
@@ -218,48 +228,61 @@ public final class AppStats {
                 type: .custom,
                 name: eventName,
                 sessionID: sessionID,
-                properties: properties
+                properties: mergedProperties(with: properties)
             )
-            
+
             try await eventCollector.collect(event)
-            
+
         } catch {
             handleError(error)
         }
     }
-    
+
     private func trackAppLaunch() async {
         guard let eventCollector = eventCollector else { return }
-        
+
         do {
             // Emit session_start first — this is what the live dashboard
             // listens for to count active sessions and place map pins.
             let sessionStart = Event(
                 type: .sessionStart,
                 sessionID: sessionID,
-                properties: [
+                properties: mergedProperties(with: [
                     "app_version": AppInfo.version,
                     "os_version": DeviceInfo.osVersion,
                     "device_model": DeviceInfo.deviceModel
-                ]
+                ])
             )
             try await eventCollector.collect(sessionStart)
 
             let launch = Event(
                 type: .appLaunch,
                 sessionID: sessionID,
-                properties: [
+                properties: mergedProperties(with: [
                     "app_version": AppInfo.version,
                     "build_number": AppInfo.buildNumber,
                     "os_version": DeviceInfo.osVersion,
                     "device_model": DeviceInfo.deviceModel
-                ]
+                ])
             )
             try await eventCollector.collect(launch)
-            
+
         } catch {
             handleError(error)
         }
+    }
+
+    /// Merges persistent user properties with call-specific properties, which win on key collision.
+    private func mergedProperties(with properties: [String: Any]?) -> [String: Any]? {
+        guard !userProperties.isEmpty else { return properties }
+
+        var merged = userProperties.mapValues { $0.unwrapped }
+        if let properties {
+            for (key, value) in properties {
+                merged[key] = value
+            }
+        }
+        return merged
     }
     
     private func flushEvents() async {
@@ -273,8 +296,31 @@ public final class AppStats {
     }
     
     private func setProperty(_ key: String, value: Any) async {
-        // Store user properties for inclusion in all events
-        // Implementation in EventCollector
+        userProperties[key] = AnyCodable(value)
+        await persistUserProperties()
+    }
+
+    private func loadPersistedUserProperties() async {
+        guard let storageManager else { return }
+
+        do {
+            let persisted = try await storageManager.loadUserProperties()
+            for (key, value) in persisted where userProperties[key] == nil {
+                userProperties[key] = value
+            }
+        } catch {
+            Logger.warning("Failed to load persisted user properties: \(error)")
+        }
+    }
+
+    private func persistUserProperties() async {
+        guard let storageManager else { return }
+
+        do {
+            try await storageManager.saveUserProperties(userProperties)
+        } catch {
+            Logger.warning("Failed to persist user properties: \(error)")
+        }
     }
     
     // MARK: - Lifecycle
@@ -328,9 +374,9 @@ public final class AppStats {
 
         // Track session end + background event, then flush everything
         if let eventCollector = eventCollector, !isDisabled, isInitialized {
-            let sessionEnd = Event(type: .sessionEnd, sessionID: sessionID)
+            let sessionEnd = Event(type: .sessionEnd, sessionID: sessionID, properties: mergedProperties(with: nil))
             try? await eventCollector.collect(sessionEnd)
-            let background = Event(type: .appBackground, sessionID: sessionID)
+            let background = Event(type: .appBackground, sessionID: sessionID, properties: mergedProperties(with: nil))
             try? await eventCollector.collect(background)
         }
         await flushEvents()
@@ -356,17 +402,18 @@ public final class AppStats {
             let sessionStart = Event(
                 type: .sessionStart,
                 sessionID: sessionID,
-                properties: [
+                properties: mergedProperties(with: [
                     "app_version": AppInfo.version,
                     "os_version": DeviceInfo.osVersion,
                     "device_model": DeviceInfo.deviceModel
-                ]
+                ])
             )
             try await eventCollector.collect(sessionStart)
 
             let foreground = Event(
                 type: .appForeground,
-                sessionID: sessionID
+                sessionID: sessionID,
+                properties: mergedProperties(with: nil)
             )
             try await eventCollector.collect(foreground)
         } catch {
@@ -391,7 +438,28 @@ public final class AppStats {
         // Implementation in CrashReporter.swift
         CrashReporter.setup(sessionID: sessionID)
     }
-    
+
+    private func reportPreviousCrashIfNeeded() async {
+        guard let eventCollector, let crash = CrashReporter.consumePreviousCrash() else { return }
+
+        let crashEvent = Event(
+            type: .crash,
+            sessionID: UUID(uuidString: crash.sessionID) ?? sessionID,
+            properties: [
+                "exception": crash.signal,
+                "message": crash.reason,
+                "stack_trace": crash.stackTrace,
+                "timestamp_ms": crash.timestamp.timeIntervalSince1970 * 1000
+            ]
+        )
+
+        do {
+            try await eventCollector.collect(crashEvent)
+        } catch {
+            handleError(error)
+        }
+    }
+
     // MARK: - Timer
     
     private func startFlushTimer() {

@@ -9,7 +9,16 @@ import Darwin
 
 /// Crash detection and reporting
 enum CrashReporter {
-    
+
+    /// Structured crash details recovered from the marker written on the previous launch.
+    struct PreviousCrash {
+        let timestamp: Date
+        let signal: String
+        let reason: String
+        let sessionID: String
+        let stackTrace: String
+    }
+
     private static let lock = NSLock()
     private nonisolated(unsafe) static var sessionID: UUID?
     private nonisolated(unsafe) static var previousSignalHandlers: [Int32: sigaction] = [:]
@@ -147,18 +156,56 @@ enum CrashReporter {
     }
     
     // MARK: - Crash Detection (Next Launch)
-    
-    static func checkForPreviousCrash() -> String? {
+
+    /// Returns crash details from the previous launch, or nil if there was none.
+    /// Deletes the marker on read so it isn't reported twice.
+    static func consumePreviousCrash() -> PreviousCrash? {
         guard let crashFileURL = getCrashFileURL(),
               FileManager.default.fileExists(atPath: crashFileURL.path),
-              let crashData = try? String(contentsOf: crashFileURL, encoding: .utf8) else {
+              let raw = try? String(contentsOf: crashFileURL, encoding: .utf8) else {
             return nil
         }
-        
-        // Delete crash file
+
         try? FileManager.default.removeItem(at: crashFileURL)
-        
-        return crashData
+
+        return parseMarker(raw)
+    }
+
+    private static func parseMarker(_ raw: String) -> PreviousCrash {
+        var timestamp = Date()
+        var signal = "UNKNOWN"
+        var reason = ""
+        var sessionID = ""
+        var stackTraceLines: [String] = []
+        var inStackTrace = false
+
+        for substring in raw.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(substring)
+            if inStackTrace {
+                stackTraceLines.append(line)
+            } else if line.hasPrefix("CRASH_TIMESTAMP:") {
+                let value = line.dropFirst("CRASH_TIMESTAMP:".count).trimmingCharacters(in: .whitespaces)
+                if let seconds = Double(value) {
+                    timestamp = Date(timeIntervalSince1970: seconds)
+                }
+            } else if line.hasPrefix("SIGNAL:") {
+                signal = line.dropFirst("SIGNAL:".count).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("REASON:") {
+                reason = line.dropFirst("REASON:".count).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("SESSION_ID:") {
+                sessionID = line.dropFirst("SESSION_ID:".count).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("STACK_TRACE:") {
+                inStackTrace = true
+            }
+        }
+
+        return PreviousCrash(
+            timestamp: timestamp,
+            signal: signal,
+            reason: reason,
+            sessionID: sessionID,
+            stackTrace: stackTraceLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        )
     }
 }
 
