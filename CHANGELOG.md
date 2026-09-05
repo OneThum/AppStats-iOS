@@ -5,6 +5,17 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.15] - 2026-09-05
+
+### Fixed
+- The crash handler live-locked instead of crashing. It re-raised the signal while still installed as that signal's handler, so the re-raise was delivered straight back into itself and the process spun in its own crash handler rather than dying. In the field this cost the crash report outright: the app appeared frozen at ~185% CPU, produced no report, and was eventually killed by the watchdog with a cause pointing nowhere near the real fault. Under XCTest there is no watchdog, so a single test case hung 34 minutes. The handler now restores the previous disposition *before* re-raising, so `raise` runs the previous handler — or the default action — exactly as the system would.
+- Removed the hand-rolled chained call into the previous handler, which is now redundant (and previously ran the previous handler twice). It also crashed outright when the previous disposition was `SIG_IGN`: `SIG_IGN` is the address `0x1`, which the old code treated as a real function pointer and called. `SIG_IGN` on `SIGPIPE` is common on Apple platforms.
+- The handler no longer reads the `previousSignalHandlers` dictionary. A Swift `Dictionary` lookup can allocate, and allocating inside a signal handler deadlocks whenever the crash happened while the allocator lock was held — precisely the heap-corruption `SIGABRT` case crash reporting most needs to survive. Handler-reachable state now lives in fixed-size arrays populated at install time; the dictionary is unchanged and still used elsewhere.
+- `installSignalHandlers()` is now idempotent. `AppStats.configure()` is public and has no re-entry guard, so a host app could call it twice; the second install captured AppStats' own handler as the "previous" disposition, which would reintroduce the live-lock on restore.
+
+### Known issue
+- `writeCrashMarker()` is still called from the signal handler and is still not async-signal-safe (Foundation plus filesystem). This is pre-existing and unchanged. It is a real hazard, but it is not what caused the live-lock; making the marker write genuinely signal-safe (pre-serialise at setup, `write(2)` only) is its own change.
+
 ## [1.0.14] - 2026-08-11
 
 ### Fixed

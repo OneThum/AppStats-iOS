@@ -22,6 +22,28 @@ enum CrashReporter {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var sessionID: UUID?
     private nonisolated(unsafe) static var previousSignalHandlers: [Int32: sigaction] = [:]
+
+    /// Signal-handler-safe mirror of `previousSignalHandlers`.
+    ///
+    /// The dictionary is kept for the rest of the type, but a signal handler must not touch
+    /// it: a `Dictionary` lookup can allocate, and allocating inside a handler deadlocks when
+    /// the crash itself happened under the allocator lock. These fixed-size arrays are filled
+    /// once during `installSignalHandlers()` and only read afterwards.
+    private nonisolated(unsafe) static var handledSignals = [Int32](repeating: 0, count: 8)
+    // `Array(repeating:)` rather than `[sigaction](repeating:)`: `sigaction` names both a
+    // struct and a function on Darwin, and the explicit-element form resolves to an array of
+    // the *function* type and fails to compile. Inferring the element from `sigaction()`
+    // picks the struct initialiser.
+    private nonisolated(unsafe) static var savedDispositions = Array(repeating: sigaction(), count: 8)
+    private nonisolated(unsafe) static var handledSignalCount = 0
+
+    /// Guards against installing our handler twice.
+    ///
+    /// `AppStats.configure()` is public and has no re-entry guard, so a host app can call it
+    /// more than once. A second install would capture *our own* handler as the "previous"
+    /// disposition, and restoring that on crash would re-enter this handler — reintroducing
+    /// exactly the live-lock this handler exists to avoid.
+    private nonisolated(unsafe) static var signalHandlersInstalled = false
     private nonisolated(unsafe) static var previousExceptionHandler: NSUncaughtExceptionHandler?
     
     static func setup(sessionID: UUID) {
@@ -43,6 +65,9 @@ enum CrashReporter {
     // MARK: - Signal Handlers
     
     private static func installSignalHandlers() {
+        guard !signalHandlersInstalled else { return }
+        signalHandlersInstalled = true
+
         let signals: [Int32] = [
             SIGABRT,
             SIGILL,
@@ -62,30 +87,62 @@ enum CrashReporter {
             
             // Store previous handler
             previousSignalHandlers[signal] = oldAction
+
+            // …and again where the signal handler itself can reach it without allocating.
+            if handledSignalCount < handledSignals.count {
+                handledSignals[handledSignalCount] = signal
+                savedDispositions[handledSignalCount] = oldAction
+                handledSignalCount += 1
+            }
         }
     }
     
     private static let signalHandler: @convention(c) (Int32, UnsafeMutablePointer<__siginfo>?, UnsafeMutableRawPointer?) -> Void = { signal, info, context in
-        
-        // Create minimal crash report (async-signal-safe)
+
+        // Restore the previous disposition for this signal BEFORE doing anything else.
+        //
+        // This must happen first. The handler ends by re-raising, and while this handler is
+        // still installed that re-raise is delivered straight back here — the process spins
+        // in its own crash handler instead of dying. Observed in the field as a hang, not a
+        // crash: the app burns ~185% CPU indefinitely, produces no crash report, and is
+        // eventually killed by the watchdog with a cause that points nowhere near the real
+        // fault. Under XCTest there is no watchdog at all, so the test host hangs until the
+        // CI job times out.
+        //
+        // Restoring first also removes the need to invoke the previous handler by hand: once
+        // the disposition is back to what it was, `raise` runs it (or the default action)
+        // exactly as the system would have.
+        restorePreviousDisposition(signal)
+
+        // Create minimal crash report
         let timestamp = Date()
         let signalName = signalNameForCode(signal)
-        
+
         // Write crash marker to file (for next launch detection)
         writeCrashMarker(signal: signalName, timestamp: timestamp)
-        
-        // Call previous handler if exists
-        if let previousHandler = previousSignalHandlers[signal] {
-            if previousHandler.__sigaction_u.__sa_sigaction != nil {
-                previousHandler.__sigaction_u.__sa_sigaction(signal, info, context)
-            } else if previousHandler.__sigaction_u.__sa_handler != nil {
-                let handler = previousHandler.__sigaction_u.__sa_handler
-                handler?(signal)
-            }
-        }
-        
-        // Re-raise signal
+
+        // Re-raise. The previous handler — or SIG_DFL — now owns the signal, so this
+        // terminates rather than re-entering.
         signal_raise(signal)
+    }
+
+    /// Reinstalls whatever was handling `signal` before AppStats did, falling back to the
+    /// default action when we never recorded one.
+    ///
+    /// Reads from a fixed-size array rather than the `previousSignalHandlers` dictionary:
+    /// a Swift `Dictionary` lookup can allocate, and allocating inside a signal handler
+    /// deadlocks whenever the crash happened while the allocator lock was held — which is
+    /// exactly the case for a heap-corruption `SIGABRT`.
+    private static func restorePreviousDisposition(_ signal: Int32) {
+        for index in 0..<handledSignalCount where handledSignals[index] == signal {
+            var previous = savedDispositions[index]
+            sigaction(signal, &previous, nil)
+            return
+        }
+
+        var fallback = sigaction()
+        fallback.__sigaction_u.__sa_handler = SIG_DFL
+        sigaction(signal, &fallback, nil)
     }
     
     private static func signalNameForCode(_ code: Int32) -> String {
