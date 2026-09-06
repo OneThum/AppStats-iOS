@@ -5,6 +5,18 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.16] - 2026-09-06
+
+### Fixed
+- The crash marker write is now genuinely async-signal-safe. `writeCrashMarker()` ran inside the signal handler under a comment claiming it was safe, when it called `Date()`, built the marker with Swift string interpolation, and wrote it through `String.write(to:atomically:encoding:)` — all of which allocate or take locks. A crash that happened while the allocator lock was held would deadlock in the handler: the same class of hang 1.0.15 closed for signal *dispositions*, still open for the marker *write*. The handler now uses a separate path built only from `open`/`write`/`close` and `time(nil)`, with the file path resolved and the scratch buffers allocated up front on a normal thread.
+- The signal handler no longer calls `Date()` or `signalNameForCode` (which returns a Swift `String`). The raw signal number is written instead and resolved back to a name on the next launch, when the marker is parsed on a normal thread.
+
+### Changed
+- Markers written from a signal now use `CRASH_SIGNAL:`/`CRASH_EPOCH:`. `NSException` crashes are unaffected: that handler runs as an ordinary call on the throwing thread, so it keeps the existing richer marker with reason and stack trace. Both formats are read back.
+
+### Notes
+- The crashing session's id is still recorded on the signal path (pre-formatted at setup, since `UUID.uuidString` allocates), so a replayed crash stays attributed to the session that crashed rather than to the session live when the marker is read.
+
 ## [1.0.15] - 2026-09-05
 
 ### Fixed

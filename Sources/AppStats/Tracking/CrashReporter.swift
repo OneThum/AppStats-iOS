@@ -45,6 +45,153 @@ enum CrashReporter {
     /// exactly the live-lock this handler exists to avoid.
     private nonisolated(unsafe) static var signalHandlersInstalled = false
     private nonisolated(unsafe) static var previousExceptionHandler: NSUncaughtExceptionHandler?
+
+    // MARK: - Async-signal-safe marker write
+
+    /// The crash marker's file path, as raw NUL-terminated UTF-8 bytes, resolved once on a
+    /// normal thread before any signal handler can fire.
+    ///
+    /// The signal handler must not resolve paths itself: `StoragePaths.crashMarkerURL()` goes
+    /// through `FileManager`, which allocates and takes locks internally, and doing that from a
+    /// signal handler deadlocks whenever the crash happened while one of those locks was already
+    /// held — the same class of bug `restorePreviousDisposition` exists to close for signal
+    /// *dispositions*, here for the marker *write*. This buffer, and `signalSafeScratchBuffer`
+    /// below, are the only state the handler touches, and both are pre-allocated: a `static var`
+    /// initializes lazily on first access, so `prepareSignalSafeCrashMarkerPath()` must run from
+    /// `setup(sessionID:)` — before `installSignalHandlers()` — to force that allocation to
+    /// happen outside the handler, not the first time the handler itself reads it.
+    private nonisolated(unsafe) static var signalSafePathBuffer = [UInt8](repeating: 0, count: 1024)
+    private nonisolated(unsafe) static var signalSafePathLength = 0
+
+    /// Reused scratch space for formatting the marker line. Mutated in place only — never
+    /// resized or reassigned — so writing into it does not allocate.
+    private nonisolated(unsafe) static var signalSafeScratchBuffer = [UInt8](repeating: 0, count: 64)
+
+    /// The complete `SESSION_ID:<uuid>\n` line, formatted once on a normal thread.
+    ///
+    /// The signal handler cannot build this itself — `UUID.uuidString` allocates — but it must
+    /// still be recorded: without it a crash is attributed to whatever session happens to be
+    /// live when the marker is read on the *next* launch, not the session that actually
+    /// crashed. Pre-formatting here keeps the handler down to a `write(2)` of bytes that were
+    /// already sitting in memory.
+    private nonisolated(unsafe) static var signalSafeSessionBuffer = [UInt8](repeating: 0, count: 64)
+    private nonisolated(unsafe) static var signalSafeSessionLength = 0
+
+    /// Resolves and caches the crash marker path for `writeCrashMarkerSignalSafe`. Safe to call
+    /// repeatedly; must be called at least once, from a normal thread, before any signal handler
+    /// can fire.
+    private static func prepareSignalSafeCrashMarkerPath() {
+        // Format the session line first, so it is ready (and its buffer's lazy static
+        // initialization already forced) even if path resolution below fails.
+        if let sessionID {
+            let sessionBytes = Array("SESSION_ID:\(sessionID.uuidString)\n".utf8)
+            let sessionCount = min(sessionBytes.count, signalSafeSessionBuffer.count)
+            signalSafeSessionBuffer.withUnsafeMutableBufferPointer { buf in
+                for i in 0..<sessionCount { buf[i] = sessionBytes[i] }
+            }
+            signalSafeSessionLength = sessionCount
+        }
+
+        guard let url = try? StoragePaths.crashMarkerURL() else { return }
+        let bytes = Array(url.path.utf8)
+        let count = min(bytes.count, signalSafePathBuffer.count - 1)
+        signalSafePathBuffer.withUnsafeMutableBufferPointer { buf in
+            for i in 0..<count { buf[i] = bytes[i] }
+            buf[count] = 0 // NUL-terminate for `open`.
+        }
+        signalSafePathLength = count
+        // Touch the scratch buffer too, so its first (allocating) access also happens here.
+        signalSafeScratchBuffer.withUnsafeMutableBufferPointer { _ in }
+    }
+
+    /// Writes a minimal crash marker using only functions POSIX guarantees are safe to call from
+    /// a signal handler: `open`, `write`, `close`. No Swift string interpolation, no Foundation,
+    /// no `Date()`, and no heap allocation on this path — everything that could allocate was
+    /// already done by `prepareSignalSafeCrashMarkerPath()`.
+    ///
+    /// Deliberately minimal: just the signal number. The richer marker with reason and stack
+    /// trace (`writeCrashMarker` below) stays exactly as it was, because it is only ever called
+    /// from the `NSUncaughtExceptionHandler` path, which runs as an ordinary function call on
+    /// the throwing thread — not inside a signal handler — so Foundation is safe to use there.
+    private static func writeCrashMarkerSignalSafe(signalNumber: Int32) {
+        guard signalSafePathLength > 0 else { return }
+
+        let fd = signalSafePathBuffer.withUnsafeMutableBufferPointer { pathBuf -> Int32 in
+            pathBuf.baseAddress!.withMemoryRebound(to: CChar.self, capacity: pathBuf.count) { cPath in
+                open(cPath, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+            }
+        }
+        guard fd >= 0 else { return }
+
+        signalSafeScratchBuffer.withUnsafeMutableBufferPointer { buf in
+            var idx = 0
+            let prefix: StaticString = "CRASH_SIGNAL:"
+            prefix.withUTF8Buffer { p in
+                for byte in p where idx < buf.count { buf[idx] = byte; idx += 1 }
+            }
+
+            // Manual decimal formatting: digits written directly into place, most-significant
+            // digit first, with no intermediate array and no snprintf (whose async-signal
+            // safety POSIX does not guarantee).
+            if signalNumber == 0 {
+                if idx < buf.count { buf[idx] = UInt8(ascii: "0"); idx += 1 }
+            } else {
+                var value = signalNumber
+                var digitCount = 0
+                var probe = value
+                while probe > 0 { digitCount += 1; probe /= 10 }
+                var writeIndex = idx + digitCount - 1
+                while value > 0 && writeIndex >= 0 && writeIndex < buf.count {
+                    buf[writeIndex] = UInt8(ascii: "0") + UInt8(value % 10)
+                    value /= 10
+                    writeIndex -= 1
+                }
+                idx += digitCount
+            }
+            if idx < buf.count { buf[idx] = UInt8(ascii: "\n"); idx += 1 }
+
+            // `time(nil)` — unlike `Date()` — is on POSIX's async-signal-safe list, and is cheap
+            // enough to include: the marker is otherwise useless for telling *when* a crash from
+            // months of backlogged reports happened.
+            let epochPrefix: StaticString = "CRASH_EPOCH:"
+            epochPrefix.withUTF8Buffer { p in
+                for byte in p where idx < buf.count { buf[idx] = byte; idx += 1 }
+            }
+            var epoch = Int64(time(nil))
+            if epoch == 0 {
+                if idx < buf.count { buf[idx] = UInt8(ascii: "0"); idx += 1 }
+            } else {
+                var digitCount = 0
+                var probe = epoch
+                while probe > 0 { digitCount += 1; probe /= 10 }
+                var writeIndex = idx + digitCount - 1
+                while epoch > 0 && writeIndex >= 0 && writeIndex < buf.count {
+                    buf[writeIndex] = UInt8(ascii: "0") + UInt8(epoch % 10)
+                    epoch /= 10
+                    writeIndex -= 1
+                }
+                idx += digitCount
+            }
+            if idx < buf.count { buf[idx] = UInt8(ascii: "\n"); idx += 1 }
+
+            // `idx` is advanced by a digit count that is computed before the bounds-checked
+            // write loop, so clamp rather than trusting the two to agree: passing a length past
+            // the end of the buffer would hand `write` unrelated heap bytes. Unreachable at the
+            // current buffer size (the longest possible line is well under it), which is exactly
+            // why it is worth pinning here rather than in arithmetic thirty lines away.
+            _ = write(fd, buf.baseAddress, min(idx, buf.count))
+        }
+
+        // Pre-formatted on a normal thread — see signalSafeSessionBuffer. Written separately
+        // so the handler never has to copy it anywhere first.
+        if signalSafeSessionLength > 0 {
+            signalSafeSessionBuffer.withUnsafeMutableBufferPointer { sessionBuf in
+                _ = write(fd, sessionBuf.baseAddress, min(signalSafeSessionLength, sessionBuf.count))
+            }
+        }
+
+        close(fd)
+    }
     
     static func setup(sessionID: UUID) {
         self.sessionID = sessionID
@@ -54,7 +201,12 @@ enum CrashReporter {
         } catch {
             Logger.warning("Crash marker storage unavailable: \(error)")
         }
-        
+
+        // Must run before installSignalHandlers(): resolves the crash marker path and forces
+        // the scratch buffers' lazy static initialization, so the signal handler never performs
+        // either for the first time from inside a signal.
+        prepareSignalSafeCrashMarkerPath()
+
         // Install signal handlers
         installSignalHandlers()
         
@@ -114,12 +266,16 @@ enum CrashReporter {
         // exactly as the system would have.
         restorePreviousDisposition(signal)
 
-        // Create minimal crash report
-        let timestamp = Date()
-        let signalName = signalNameForCode(signal)
-
-        // Write crash marker to file (for next launch detection)
-        writeCrashMarker(signal: signalName, timestamp: timestamp)
+        // Write crash marker to file (for next launch detection). Deliberately the
+        // *signal-safe* writer, not `writeCrashMarker` below: `Date()` and `signalNameForCode`
+        // (a Swift String return) used to be called directly here, and neither is guaranteed
+        // async-signal-safe — Foundation's `Date()` can allocate internally, and while a short
+        // ASCII `String` literal usually avoids the heap via small-string optimization, that is
+        // an implementation detail, not a language guarantee, and this is exactly the context
+        // where relying on "usually" is how the previous bug in this file happened. The signal
+        // number is all the safe path carries; the human-readable name is resolved later, on a
+        // normal thread, when `consumePreviousCrash()` parses the marker back.
+        writeCrashMarkerSignalSafe(signalNumber: signal)
 
         // Re-raise. The previous handler — or SIG_DFL — now owns the signal, so this
         // terminates rather than re-entering.
@@ -247,6 +403,20 @@ enum CrashReporter {
                 }
             } else if line.hasPrefix("SIGNAL:") {
                 signal = line.dropFirst("SIGNAL:".count).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("CRASH_SIGNAL:") {
+                // Written by the async-signal-safe path, which cannot resolve a name string
+                // (or even call Date()) from inside the handler — see writeCrashMarkerSignalSafe.
+                // Translate the raw number back to a name here, on a normal thread, where doing
+                // so is unremarkable.
+                let value = line.dropFirst("CRASH_SIGNAL:".count).trimmingCharacters(in: .whitespaces)
+                if let code = Int32(value) {
+                    signal = signalNameForCode(code)
+                }
+            } else if line.hasPrefix("CRASH_EPOCH:") {
+                let value = line.dropFirst("CRASH_EPOCH:".count).trimmingCharacters(in: .whitespaces)
+                if let seconds = Double(value) {
+                    timestamp = Date(timeIntervalSince1970: seconds)
+                }
             } else if line.hasPrefix("REASON:") {
                 reason = line.dropFirst("REASON:".count).trimmingCharacters(in: .whitespaces)
             } else if line.hasPrefix("SESSION_ID:") {
