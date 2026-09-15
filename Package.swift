@@ -26,6 +26,9 @@ let package = Package(
             name: "AppStats",
             dependencies: [],
             path: "Sources/AppStats",
+            resources: [
+                .copy("PrivacyInfo.xcprivacy")
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
