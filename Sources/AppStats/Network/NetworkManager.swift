@@ -22,17 +22,24 @@ actor NetworkManager {
     
     // MARK: - Initialization
     
-    init(apiKey: String, baseURL: URL) {
+    init(apiKey: String, baseURL: URL, testProtocolClasses: [AnyClass]? = nil) {
         self.apiKey = apiKey
         self.baseURL = baseURL
-        
+
         // Configure URL session with timeout
         // More aggressive timeouts for mobile networks
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15  // Reduced from 30s for faster failure detection
         config.timeoutIntervalForResource = 30 // Reduced from 60s
         config.networkServiceType = .background
-        
+
+        // Test-only seam: lets tests intercept requests with a custom URLProtocol instead of
+        // hitting the real network. Always nil in production, which leaves this identical to
+        // the previous unconditional `URLSession(configuration: config)`.
+        if let testProtocolClasses {
+            config.protocolClasses = testProtocolClasses
+        }
+
         self.session = URLSession(configuration: config)
     }
     

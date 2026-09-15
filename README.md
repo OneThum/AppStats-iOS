@@ -6,7 +6,7 @@ The official Swift SDK for AppStats analytics.
 
 - 🎯 **Zero-config tracking** - Automatic screen views and lifecycle events
 - 📱 **Apple-native** - Built with Swift 6, supports iOS 16+, tvOS 16+, macOS 13+, visionOS 1.0+
-- 🔐 **Privacy-first** - No PII, no advertising IDs, no persistent tracking
+- 🔐 **Privacy-first** - No advertising IDs, no persistent tracking, no PII collected by the SDK itself
 - ⚡ **Lightweight** - < 200KB binary size, < 5ms launch impact
 - 🛡️ **Crash reporting** - Automatic crash detection with symbolicated stack traces
 - 🔄 **Resilient** - Offline queueing, retry logic, circuit breakers
@@ -20,14 +20,14 @@ Add AppStats to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/OneThum/AppStats-iOS.git", from: "1.0.16")
+    .package(url: "https://github.com/OneThum/AppStats-iOS.git", from: "1.0.17")
 ]
 ```
 
 Or in Xcode:
 1. File → Add Package Dependencies
 2. Enter: `https://github.com/OneThum/AppStats-iOS.git`
-3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.16`
+3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.17`
 
 ## Quick Start
 
@@ -191,9 +191,15 @@ Automatically included with all events:
 
 - ❌ No IDFA or IDFV
 - ❌ No persistent user IDs
-- ❌ No PII (names, emails, etc.)
+- ❌ No PII (names, emails, etc.) requested or collected by the SDK itself
 - ❌ No location permissions required
 - ❌ No third-party trackers
+
+> **Note:** Crash reports include the crashing exception's `reason` string and stack trace
+> (capped at 1,000 and 4,000 characters respectively) as reported by the OS. If your app
+> builds exception messages by interpolating live data — a value, a URL, a key path — that
+> text can end up in a crash report. The SDK doesn't add PII of its own, but it can't scrub
+> PII your app puts into an exception's message either.
 
 ## Performance
 

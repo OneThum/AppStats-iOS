@@ -5,6 +5,12 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.17] - 2026-09-15
+
+### Fixed
+- `CrashReporter`'s `NSException` handler captured `exception.reason` and `callStackSymbols` verbatim with no bound. Both are app-authored strings — code routinely builds exception messages by interpolating live state (a KVC key path, a malformed input value, a URL with query params) — so an unbounded capture could carry incidental PII off the device despite this README's "No PII" claim. Both fields are now capped (1,000 / 4,000 characters) at the capture site, and the README's privacy claims were reworded to describe what the SDK actually guarantees.
+- `EventCollector.flush()` could partially evict a batch it was actively retrying. `flush()` removes events from `eventQueue` before `await`-ing the network send; that suspension let concurrent `collect()` calls grow the queue, and on failure the catch block trimmed back down to `maxQueueSize` from the head — meaning a batch that had already failed once and was about to be retried could lose events to arrivals that hadn't even been attempted yet. The trim now happens from the tail, so a batch under retry always survives ahead of newer, unattempted events.
+
 ## [1.0.16] - 2026-09-06
 
 ### Fixed

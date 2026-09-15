@@ -13,15 +13,16 @@ actor EventCollector {
     private let network: NetworkManager
     
     private var eventQueue: [Event] = []
-    private let maxQueueSize = 500 // Hard limit per SDK spec
+    private let maxQueueSize: Int // Hard limit per SDK spec; 500 in production
     private let batchSize = 20 // Flush when queue reaches this size
-    
+
     // MARK: - Initialization
-    
-    init(sessionID: UUID, storage: StorageManager, network: NetworkManager) {
+
+    init(sessionID: UUID, storage: StorageManager, network: NetworkManager, maxQueueSize: Int = 500) {
         self.sessionID = sessionID
         self.storage = storage
         self.network = network
+        self.maxQueueSize = maxQueueSize
         
         // Load any persisted events from previous session
         Task {
@@ -83,18 +84,25 @@ actor EventCollector {
         } catch {
             // On failure, restore events to queue
             eventQueue.insert(contentsOf: eventsToSend, at: 0)
-            
-            // Keep queue within limits
+
+            // Keep queue within limits. Trim from the tail (the newest arrivals, appended by
+            // `collect()` while this batch was in flight) rather than the head: `eventsToSend`
+            // just failed to send and is about to be retried, so it must survive eviction
+            // ahead of events that haven't been attempted yet. This intentionally overrides
+            // `collect()`'s own steady-state "evict oldest" policy for the batch under retry.
             if eventQueue.count > maxQueueSize {
-                eventQueue = Array(eventQueue.suffix(maxQueueSize))
+                eventQueue = Array(eventQueue.prefix(maxQueueSize))
             }
-            
+
             throw error
         }
     }
     
+    /// Test-only snapshot of the in-memory queue, oldest first.
+    var queueSnapshotForTesting: [Event] { eventQueue }
+
     // MARK: - Private
-    
+
     private func loadPersistedEvents() async {
         do {
             let persistedEvents = try await storage.loadEvents()

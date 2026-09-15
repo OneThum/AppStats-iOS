@@ -321,13 +321,25 @@ enum CrashReporter {
         NSSetUncaughtExceptionHandler(exceptionHandler)
     }
     
+    /// Caps on the free-form text captured from `NSException`.
+    ///
+    /// `exception.reason` and `.callStackSymbols` are app-authored strings, not something
+    /// this SDK controls the shape of: host code routinely builds exception messages by
+    /// interpolating live state (a KVC key path, a malformed input value, a URL with query
+    /// params), which can carry incidental PII despite the README's "No PII" claim. There's
+    /// no way to redact that safely, but bounding it limits how much can leave the device in
+    /// any one crash report and keeps a pathological reason string from bloating the marker
+    /// file or the uploaded event.
+    private static let maxReasonLength = 1000
+    private static let maxStackTraceLength = 4000
+
     private static let exceptionHandler: @convention(c) (NSException) -> Void = { exception in
         // Create crash report from exception
         let timestamp = Date()
         let name = exception.name.rawValue
-        let reason = exception.reason ?? "No reason"
-        let stackTrace = exception.callStackSymbols.joined(separator: "\n")
-        
+        let reason = String((exception.reason ?? "No reason").prefix(maxReasonLength))
+        let stackTrace = String(exception.callStackSymbols.joined(separator: "\n").prefix(maxStackTraceLength))
+
         writeCrashMarker(
             signal: "NSException: \(name)",
             timestamp: timestamp,
