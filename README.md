@@ -20,14 +20,14 @@ Add AppStats to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/OneThum/AppStats-iOS.git", from: "1.0.18")
+    .package(url: "https://github.com/OneThum/AppStats-iOS.git", from: "1.0.19")
 ]
 ```
 
 Or in Xcode:
 1. File → Add Package Dependencies
 2. Enter: `https://github.com/OneThum/AppStats-iOS.git`
-3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.18`
+3. For Dependency Rule, select **Up to Next Major Version** starting from `1.0.19`
 
 ## Quick Start
 

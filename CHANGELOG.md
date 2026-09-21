@@ -5,7 +5,7 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.19] - 2026-09-21
 
 ### Changed
 - The privacy manifest now declares `NSPrivacyCollectedDataTypeCoarseLocation` (analytics; not linked to identity, not used for tracking). The SDK requests no location permission and sends no location field, but the receiving service resolves each request's IP address to a country, city and city-level coordinates and keeps them with the event for 90 days, which is past servicing the request. Apple separates coarse from precise by the resolution of the information rather than by stored decimal places, and an IP lookup yields a city-area centroid, so it is declared coarse. Previously the manifest declared only product interaction and crash data.
