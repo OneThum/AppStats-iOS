@@ -55,7 +55,7 @@ actor StorageManager {
         
         // Save to disk
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .appStatsISO8601
         let data = try encoder.encode(events)
         
         try data.write(to: databaseURL, options: .atomic)
@@ -74,7 +74,7 @@ actor StorageManager {
         let data = try Data(contentsOf: databaseURL)
         
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .appStatsISO8601
         
         return try decoder.decode([Event].self, from: data)
     }
@@ -153,7 +153,7 @@ actor StorageManager {
         
         // Save back
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .appStatsISO8601
         let data = try encoder.encode(events)
         
         try data.write(to: databaseURL, options: .atomic)

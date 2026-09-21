@@ -359,9 +359,9 @@ public final class AppStats {
         // Without this, the unstructured Task from the notification observer can
         // be killed mid-flight and events are silently lost.
         #if canImport(UIKit) && !os(watchOS)
-        let app = await UIApplication.shared
+        let app = UIApplication.shared
         var bgTaskID = UIBackgroundTaskIdentifier.invalid
-        bgTaskID = await app.beginBackgroundTask(withName: "AppStats.flush") {
+        bgTaskID = app.beginBackgroundTask(withName: "AppStats.flush") {
             // Expiration handler — clean up if we ran out of time
             Task { @MainActor in
                 if bgTaskID != .invalid {

@@ -164,7 +164,7 @@ final class ColdStartTests: XCTestCase {
         while Date() < deadline {
             if let data = try? Data(contentsOf: eventsURL) {
                 let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
+                decoder.dateDecodingStrategy = .appStatsISO8601
                 if let events = try? decoder.decode([Event].self, from: data),
                    let match = events.first(where: { ($0.name == name || name == nil) && ($0.type == type || type == nil) }) {
                     return match

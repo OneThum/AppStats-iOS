@@ -76,7 +76,7 @@ actor NetworkManager {
         
         // Encode events to JSON
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .appStatsISO8601
         let jsonData = try encoder.encode(events)
         
         // Compress with deflate/zlib

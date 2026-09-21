@@ -5,6 +5,19 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.18] - 2026-09-21
+
+### Changed
+- Minimum iOS deployment target lowered from iOS 16.0 to iOS 15.0, so apps that still support iOS 15 can link the SDK. Nothing in the SDK needed iOS 16: every API it calls (`URLSession.data(for:)`, `Date.ISO8601FormatStyle`, Swift concurrency) is available on iOS 15. Other platform minimums are unchanged.
+
+### Fixed
+- Event timestamps were sent with whole-second precision. `JSONEncoder`'s built-in `.iso8601` strategy drops fractional seconds, so every event created within the same second shared a timestamp and the dashboard could not order them — `app_background` could appear after `session_end`, and two screen views in the same second came back in arbitrary order. Timestamps now carry milliseconds (`2026-09-18T01:55:22.250Z`), matching the Android SDK.
+
+- The privacy manifest (`PrivacyInfo.xcprivacy`) is restored. It was added to the public repository directly (PR #4), but that repository is regenerated from this one on every sync, which deletes anything not present here — so it was removed by the next sync, before any release included it. No released version has shipped a privacy manifest; this is the first.
+
+### Notes
+- Events already queued on disk by earlier versions are whole-second, and the built-in `.iso8601` *decoding* strategy rejects fractional seconds, so the on-disk queue now decodes both forms. Without this, updating only the encoder would have made every event queued by this version unreadable after the next launch.
+
 ## [1.0.17] - 2026-09-15
 
 ### Fixed

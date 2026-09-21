@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "AppStats",
     platforms: [
-        .iOS(.v16),
+        .iOS(.v15),
         .macOS(.v13),
         .visionOS(.v1),
         .tvOS(.v16),
@@ -26,6 +26,9 @@ let package = Package(
             name: "AppStats",
             dependencies: [],
             path: "Sources/AppStats",
+            resources: [
+                .copy("PrivacyInfo.xcprivacy")
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
