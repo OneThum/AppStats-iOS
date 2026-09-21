@@ -36,6 +36,27 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
+		<!-- Coarse location, derived server-side. The SDK itself requests no
+		     location permission and sends no location field: events carry none.
+		     The receiving service resolves the request's IP address to a
+		     country, city and city-level coordinates, and keeps them with the
+		     event for 90 days, which is past servicing the request. Apple
+		     distinguishes coarse from precise by the resolution of the
+		     information, and an IP lookup yields a city-area centroid, the
+		     "Approximate Location Services" resolution Apple gives as its
+		     coarse example, so it is declared coarse. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
