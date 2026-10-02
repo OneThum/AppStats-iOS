@@ -5,6 +5,21 @@ All notable changes to the AppStats SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.20] - 2026-10-02
+
+### Fixed
+- Events could be sent to the server twice. On launch `EventCollector` restores the queue persisted by the previous run, in a detached task, and appended the file's contents to `eventQueue` unconditionally. But `collect()` persists the queue as it goes, so the file being read can already contain the events sitting in the queue — on a cold start, any event tracked in the first moments of launch was liable to be queued twice and delivered twice. The restore now skips any event already queued.
+
+- The launch restore could push the queue past `maxQueueSize`. It appended up to `maxQueueSize` events on top of whatever `collect()` had already queued, so the ceiling could be exceeded by the size of the restored batch. The limit is now applied against the queue as it stands.
+
+- `NetworkManager` counted every failed send twice, so the circuit breaker opened after 5 consecutive server errors instead of the intended 10. `throw NetworkError.serverError` inside the request's `do` block fell through to the trailing `catch`, which called `handleFailure()` a second time after the status-code switch had already counted it. The same path also made a 4xx count against the breaker despite the switch explicitly resetting the counter for client errors — so an app with a wrong API key would stop sending entirely rather than simply failing each request. `NetworkError` is now rethrown without being re-counted, and a non-HTTP response is counted where it is raised.
+
+### Added
+- Behavioural test coverage for the pieces above, taking the SDK's own suite from 12 cases to 45: what the request actually carries (headers, and that the compressed body is raw DEFLATE that inflates back to the events), retry and circuit-breaker behaviour, batching thresholds and queue eviction, the launch restore, and the encoded JSON against the field names the ingestion schema requires. Both fixes above were found by these tests failing on first run.
+
+### Notes
+- Three test-only seams were added, following the existing `testProtocolClasses` precedent: `StorageManager(directoryForTesting:)`, `EventCollector.awaitInitialLoadForTesting()`, and `EventCollector.eventsToRestore(...)` extracted as a pure function. All are internal; nothing in the public API changed, and production behaviour is unchanged by them.
+
 ## [1.0.19] - 2026-09-21
 
 ### Changed

@@ -6,9 +6,9 @@ import Foundation
 enum StoragePaths {
 
     private static let appStatsDirectoryName = "AppStats"
-    private static let eventsFileName = "events.json"
+    static let eventsFileName = "events.json"
     private static let crashMarkerFileName = "crash.txt"
-    private static let userPropertiesFileName = "user_properties.json"
+    static let userPropertiesFileName = "user_properties.json"
 
     #if os(tvOS)
     private static let baseDirectoryKind: FileManager.SearchPathDirectory = .cachesDirectory

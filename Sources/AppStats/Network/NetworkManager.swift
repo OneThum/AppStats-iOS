@@ -88,6 +88,9 @@ actor NetworkManager {
             let (_, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
+                // Counted here rather than relying on the catch below, which no longer
+                // re-counts NetworkError.
+                handleFailure()
                 throw NetworkError.invalidResponse
             }
             
@@ -128,6 +131,13 @@ actor NetworkManager {
                 handleFailure()
                 throw error
             }
+        } catch let error as NetworkError {
+            // Already accounted for above: the switch counts a 5xx, deliberately does not
+            // count a 4xx, and the guard counts a non-HTTP response. Falling through to the
+            // catch below counted every one of them a second time, which opened the circuit
+            // after 5 server errors instead of maxConsecutiveFailures, and made a wrong API
+            // key -- the 4xx the switch had just zeroed -- trip the breaker after all.
+            throw error
         } catch {
             handleFailure()
             throw error

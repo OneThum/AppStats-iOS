@@ -8,12 +8,19 @@ import XCTest
 
 final class EventCollectorRetryTests: XCTestCase {
 
+    /// A private directory per test, rather than the app's real events file. This test
+    /// asserts an exact five-event queue, and `EventCollector` loads whatever is persisted
+    /// when it is created -- in a detached task, so a queue written by another test could
+    /// arrive after setUp had cleared the shared file and push the retried batch out.
+    private var storageDirectory: URL!
+
     override func setUpWithError() throws {
-        try? FileManager.default.removeItem(at: StoragePaths.eventsFileURL())
+        storageDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStatsTests-\(UUID().uuidString)", isDirectory: true)
     }
 
     override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: StoragePaths.eventsFileURL())
+        try? FileManager.default.removeItem(at: storageDirectory)
     }
 
     /// `EventCollector` is an actor; `flush()` suspends at `await network.sendEvents(...)`,
@@ -28,7 +35,7 @@ final class EventCollectorRetryTests: XCTestCase {
     /// chance timing between the two concurrent tasks.
     func testFailedBatchSurvivesConcurrentCollectDuringRetry() async throws {
         let sessionID = UUID()
-        let storage = StorageManager()
+        let storage = StorageManager(directoryForTesting: storageDirectory)
         let gate = FlushGate()
         GatedFailingURLProtocol.gate = gate
 
@@ -41,6 +48,11 @@ final class EventCollectorRetryTests: XCTestCase {
         // Small enough that a handful of concurrent `collect()` calls can overflow it, without
         // needing hundreds of events to exercise the eviction path.
         let collector = EventCollector(sessionID: sessionID, storage: storage, network: network, maxQueueSize: 5)
+
+        // Let the init-time restore finish first. It runs in a detached task against the same
+        // storage this test writes to, so otherwise it can land mid-test and change the queue
+        // this test is asserting on.
+        await collector.awaitInitialLoadForTesting()
 
         // The batch that is about to fail and be retried.
         let failingBatch = (0..<3).map { _ in Event(type: .custom, name: "failing_batch", sessionID: sessionID) }

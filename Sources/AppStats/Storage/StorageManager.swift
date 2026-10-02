@@ -17,16 +17,28 @@ actor StorageManager {
 
     // MARK: - Initialization
 
-    init() {
+    /// - Parameter directoryForTesting: a private directory to store in instead of the app's
+    ///   own. Always nil in production, which resolves paths through `StoragePaths` exactly
+    ///   as before. Tests pass a fresh temporary directory so they do not share one events
+    ///   file: `EventCollector` loads whatever is persisted when it is created, in a detached
+    ///   task, so a queue left behind by another test could arrive mid-test.
+    init(directoryForTesting: URL? = nil) {
         let fileManager = FileManager.default
         let resolvedPaths: (storageDirectory: URL?, databaseURL: URL?, userPropertiesURL: URL?)
 
         do {
-            let storageDirectory = try StoragePaths.ensureAppStatsDirectoryExists(fileManager: fileManager)
+            let storageDirectory: URL
+            if let directoryForTesting {
+                try fileManager.createDirectory(at: directoryForTesting, withIntermediateDirectories: true)
+                storageDirectory = directoryForTesting
+            } else {
+                storageDirectory = try StoragePaths.ensureAppStatsDirectoryExists(fileManager: fileManager)
+            }
+
             resolvedPaths = (
                 storageDirectory,
-                try StoragePaths.eventsFileURL(fileManager: fileManager),
-                try StoragePaths.userPropertiesFileURL(fileManager: fileManager)
+                storageDirectory.appendingPathComponent(StoragePaths.eventsFileName),
+                storageDirectory.appendingPathComponent(StoragePaths.userPropertiesFileName)
             )
         } catch {
             resolvedPaths = (nil, nil, nil)

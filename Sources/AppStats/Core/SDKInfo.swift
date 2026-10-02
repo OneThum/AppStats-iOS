@@ -7,10 +7,10 @@ import Foundation
 enum SDKInfo {
     
     /// SDK version (semver)
-    static let version = "1.0.19"
+    static let version = "1.0.20"
 
     /// SDK build number
-    static let buildNumber = "19"
+    static let buildNumber = "20"
     
     /// SDK identifier
     static let identifier = "com.onethum.appstats"
