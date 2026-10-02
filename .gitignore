@@ -1,0 +1,23 @@
+# This file is synced to OneThum/AppStats-iOS, which has no .gitignore of its
+# own -- the public repository is regenerated from this directory on every
+# sync, so an ignore file added there directly would be deleted by the next
+# one. Anyone cloning the public repository and running `swift test` otherwise
+# ends up with a few hundred megabytes of untracked build output.
+#
+# The private repository's root .gitignore already covers everything here, so
+# adding this changes nothing on this side.
+
+# Swift Package Manager build output
+.build/
+
+# Xcode and SwiftPM local state
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+
+# Resolved dependency versions are an application's concern, not a library's,
+# and this package has no dependencies to resolve.
+Package.resolved
+
+# macOS
+.DS_Store
